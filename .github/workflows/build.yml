@@ -269,7 +269,7 @@ jobs:
       - name: Build wheel package
         shell: sh
         run: |
-          poetry install --no-dev
+          poetry install --no-dev --no-root
           poetry build
 
           ### Platform-specific wheel renaming:
@@ -291,7 +291,7 @@ jobs:
         if: ${{ matrix.architecture != 'linux-aarch64' }}
         shell: sh
         run: |
-          poetry install
+          poetry install --no-root
           echo "-- Test SQLite in-memory --"
           poetry run pytest --log-cli-level=WARNING -k "not contention"
           echo "-- Test SQLite file DB --"
