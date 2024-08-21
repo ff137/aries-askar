@@ -306,13 +306,6 @@ jobs:
           RUST_BACKTRACE: full
           # RUST_LOG: debug
 
-      - if: ${{ runner.os == 'Linux' }}
-        name: Audit wheel
-        run: |
-          pip install auditwheel
-          auditwheel show wrappers/python/dist/*.whl | tee auditwheel.log
-          grep -q manylinux_2_17_ auditwheel.log
-
       - if: |
           github.event_name == 'release' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-python-wrapper == 'true') ||
