@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aries_askar"
-version = "0.3.2"
+version = "0.3.3b2"
 description = "Python wrapper for the Aries Askar cryptographic library"
 authors = ["Hyperledger Aries Contributors <aries@lists.hyperledger.org>"]
 readme = "README.md"
