@@ -216,7 +216,7 @@ jobs:
       matrix:
         architecture:
           [linux-aarch64, linux-x86_64, darwin-universal, windows-x86_64]
-        python-version: ["3.8"]
+        python-version: ["3.12"]
         include:
           - os: ubuntu-latest
             architecture: linux-aarch64
@@ -294,37 +294,17 @@ jobs:
           auditwheel show wrappers/python/dist/* | tee auditwheel.log
           grep -q manylinux_2_17_ auditwheel.log
 
-      - name: Upload Built Python Package
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-python-wrapper == 'true')
-        uses: actions/upload-artifact@v4
-        with:
-          name: python_package-${{ matrix.plat-name }}
-          path: wrappers/python/dist
-
-  publish-py:
-    name: Publish Python package
-    needs: [build-py]
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-python-wrapper == 'true')
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-      
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/aries-askar
-    
-    steps:
-      - name: Fetch Python package
-        uses: actions/download-artifact@v4
-        with:
-         path: wrappers/python/dist
-         pattern: "python_package-*"
-         merge-multiple: true
-      - run: ls -R wrappers/python/dist
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: wrappers/python/dist
+      - if: |
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-python-wrapper == 'true') ||
+          github.event_name == 'pull_request'
+        name: Publish to TestPyPI
+        env:
+          TWINE_USERNAME: ${{ secrets.TEST_PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_PASSWORD }}
+        run: |
+          twine upload --repository-url https://test.pypi.org/legacy/ --skip-existing dist/*
+        working-directory: wrappers/python
 
   build-ios:
     name: Build library (iOS)
