@@ -467,6 +467,16 @@ async def scan_start(
     descending: bool = False,
 ) -> ScanHandle:
     """Create a new Scan against the Store."""
+    LOGGER.debug(
+        "Starting scan: profile=%s, category=%s, tag_filter=%s, offset=%s, limit=%s, order_by=%s, descending=%s",
+        profile,
+        category,
+        tag_filter,
+        offset,
+        limit,
+        order_by,
+        descending
+    )
     return await invoke_async(
         "askar_scan_start",
         (StoreHandle, FfiStr, FfiStr, FfiJson, c_int64, c_int64, FfiStr, c_int8),
@@ -483,6 +493,7 @@ async def scan_start(
 
 
 async def scan_next(handle: ScanHandle) -> EntryListHandle:
+    LOGGER.debug("Fetching next scan results")
     return await invoke_async(
         "askar_scan_next", (ScanHandle,), handle, return_type=EntryListHandle
     )
