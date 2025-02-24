@@ -5,6 +5,7 @@ try:
 except ImportError:
     import json
 
+import logging
 from typing import Optional, Sequence, Union
 
 from . import bindings
@@ -18,6 +19,8 @@ from .bindings import (
 from .error import AskarError, AskarErrorCode
 from .key import Key
 from .types import EntryOperation, KeyAlg
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Entry:
@@ -252,6 +255,7 @@ class Scan:
         descending: bool = False,
     ):
         """Initialize the Scan instance."""
+        LOGGER.debug("Creating new Scan instance")
         self._params = (
             store,
             profile,
@@ -272,11 +276,13 @@ class Scan:
 
     def __aiter__(self):
         """Async iterator for the scan results."""
+        LOGGER.debug("Starting scan iteration")
         return self
 
     async def __anext__(self):
         """Fetch the next scan result during async iteration."""
         if self._handle is None:
+            LOGGER.debug("Initializing scan handle")
             (
                 store,
                 profile,
@@ -306,6 +312,7 @@ class Scan:
             self._buffer = iter(EntryList(list_handle)) if list_handle else None
         while True:
             if not self._buffer:
+                LOGGER.debug("No more scan results available")
                 raise StopAsyncIteration
             row = next(self._buffer, None)
             if row:
@@ -315,9 +322,11 @@ class Scan:
 
     async def fetch_all(self) -> Sequence[Entry]:
         """Fetch all remaining rows."""
+        LOGGER.debug("Fetching all scan results")
         rows = []
         async for row in self:
             rows.append(row)
+        LOGGER.debug("Retrieved %d total scan results", len(rows))
         return rows
 
     def __repr__(self) -> str:
@@ -330,6 +339,7 @@ class Store:
 
     def __init__(self, handle: StoreHandle, uri: str):
         """Initialize the Store instance."""
+        LOGGER.debug("Initializing Store instance with URI: %s", uri)
         self._handle = handle
         self._opener: OpenSession = None
         self._uri = uri
@@ -337,6 +347,7 @@ class Store:
     @classmethod
     def generate_raw_key(cls, seed: Union[str, bytes] = None) -> str:
         """Generate a new raw key for a Store."""
+        LOGGER.debug("Generating raw key for Store")
         return bindings.generate_raw_key(seed)
 
     @property
@@ -360,6 +371,13 @@ class Store:
         recreate: bool = False,
     ) -> "Store":
         """Provision a new store."""
+        LOGGER.debug(
+            "Provisioning new store: uri=%s, key_method=%s, profile=%s, recreate=%s",
+            uri,
+            key_method,
+            profile,
+            recreate
+        )
         return Store(
             await bindings.store_provision(
                 uri, key_method, pass_key, profile, recreate
@@ -377,21 +395,30 @@ class Store:
         profile: str = None,
     ) -> "Store":
         """Open an existing store."""
+        LOGGER.debug(
+            "Opening existing store: uri=%s, key_method=%s, profile=%s",
+            uri,
+            key_method,
+            profile
+        )
         return Store(await bindings.store_open(uri, key_method, pass_key, profile), uri)
 
     @classmethod
     async def remove(cls, uri: str) -> bool:
         """Remove an existing store."""
+        LOGGER.debug("Removing store: %s", uri)
         return await bindings.store_remove(uri)
 
     async def __aenter__(self) -> "Session":
         """Start a new session when used as an async context."""
+        LOGGER.debug("Starting new store session")
         if not self._opener:
             self._opener = OpenSession(self._handle, None, False)
         return await self._opener.__aenter__()
 
     async def __aexit__(self, exc_type, exc, tb):
         """Async context termination."""
+        LOGGER.debug("Ending store session")
         opener = self._opener
         self._opener = None
         return await opener.__aexit__(exc_type, exc, tb)
@@ -460,20 +487,40 @@ class Store:
         descending: bool = False,
     ) -> Scan:
         """Start a new record scan."""
+        LOGGER.debug(
+            "Starting new record scan: category=%s, tag_filter=%s, offset=%s, limit=%s, profile=%s, order_by=%s, descending=%s",
+            category,
+            tag_filter,
+            offset,
+            limit,
+            profile,
+            order_by,
+            descending
+        )
         return Scan(
             self, profile, category, tag_filter, offset, limit, order_by, descending
         )
 
     def session(self, profile: str = None) -> "OpenSession":
         """Open a new session on the store without starting a transaction."""
+        LOGGER.debug(
+            "Opening new session on store: profile=%s",
+            profile
+        )
         return OpenSession(self._handle, profile, False)
 
     def transaction(self, profile: str = None, *, autocommit=None) -> "OpenSession":
         """Open a new transactional session on the store."""
+        LOGGER.debug(
+            "Opening new transactional session on store: profile=%s, autocommit=%s",
+            profile,
+            autocommit
+        )
         return OpenSession(self._handle, profile, True, autocommit)
 
     async def close(self, *, remove: bool = False) -> bool:
         """Close and free the pool instance."""
+        LOGGER.debug("Closing store instance")
         self._opener = None
         if self._handle:
             await self._handle.close()
