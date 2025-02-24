@@ -45,9 +45,9 @@ pub const SECRET_KEY_LENGTH: usize = 32;
 pub const KEYPAIR_LENGTH: usize = SECRET_KEY_LENGTH + PUBLIC_KEY_LENGTH;
 
 /// The 'kty' value of an elliptic curve key JWK
-pub static JWK_KEY_TYPE: &str = "EC";
+pub const JWK_KEY_TYPE: &str = "EC";
 /// The 'crv' value of a K-256 key JWK
-pub static JWK_CURVE: &str = "secp256k1";
+pub const JWK_CURVE: &str = "secp256k1";
 
 type FieldSize = elliptic_curve::FieldBytesSize<k256::Secp256k1>;
 
@@ -85,7 +85,7 @@ impl K256KeyPair {
     pub fn sign(&self, message: &[u8]) -> Option<[u8; ES256K_SIGNATURE_LENGTH]> {
         if let Some(skey) = self.to_signing_key() {
             let sig: Signature = skey.sign(message);
-            let sigb: [u8; 64] = sig.to_bytes().try_into().unwrap();
+            let sigb: [u8; 64] = sig.to_bytes().into();
             Some(sigb)
         } else {
             None
@@ -128,8 +128,8 @@ impl KeyGen for K256KeyPair {
 
 impl KeySecretBytes for K256KeyPair {
     fn from_secret_bytes(key: &[u8]) -> Result<Self, Error> {
-        if let Ok(key) = key.try_into() {
-            if let Ok(sk) = SecretKey::from_bytes(key) {
+        if key.len() == SECRET_KEY_LENGTH {
+            if let Ok(sk) = SecretKey::from_bytes(key.into()) {
                 return Ok(Self::from_secret_key(sk));
             }
         }

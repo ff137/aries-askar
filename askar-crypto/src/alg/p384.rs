@@ -1,6 +1,6 @@
 //! Elliptic curve ECDH and ECDSA support on curve secp384r1
 
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryFrom;
 
 use p384::{
     ecdsa::{
@@ -46,9 +46,9 @@ pub const SECRET_KEY_LENGTH: usize = 48;
 pub const KEYPAIR_LENGTH: usize = SECRET_KEY_LENGTH + PUBLIC_KEY_LENGTH;
 
 /// The 'kty' value of an elliptic curve key JWK
-pub static JWK_KEY_TYPE: &str = "EC";
+pub const JWK_KEY_TYPE: &str = "EC";
 /// The 'crv' value of a P-384 key JWK
-pub static JWK_CURVE: &str = "P-384";
+pub const JWK_CURVE: &str = "P-384";
 
 type FieldSize = elliptic_curve::FieldBytesSize<p384::NistP384>;
 
@@ -130,8 +130,8 @@ impl KeyGen for P384KeyPair {
 
 impl KeySecretBytes for P384KeyPair {
     fn from_secret_bytes(key: &[u8]) -> Result<Self, Error> {
-        if let Ok(key) = key.try_into() {
-            if let Ok(sk) = SecretKey::from_bytes(key) {
+        if key.len() == SECRET_KEY_LENGTH {
+            if let Ok(sk) = SecretKey::from_bytes(key.into()) {
                 return Ok(Self::from_secret_key(sk));
             }
         }

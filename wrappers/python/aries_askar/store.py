@@ -1,10 +1,11 @@
 """Handling of Store instances."""
 
-import json
+try:
+    import orjson as json
+except ImportError:
+    import json
 
 from typing import Optional, Sequence, Union
-
-from cached_property import cached_property
 
 from . import bindings
 from .bindings import (
@@ -29,12 +30,12 @@ class Entry:
         self._list = lst
         self._pos = pos
 
-    @cached_property
+    @property
     def category(self) -> str:
         """Accessor for the entry category."""
         return self._list.get_category(self._pos)
 
-    @cached_property
+    @property
     def name(self) -> str:
         """Accessor for the entry name."""
         return self._list.get_name(self._pos)
@@ -44,7 +45,7 @@ class Entry:
         """Accessor for the entry value."""
         return bytes(self.raw_value)
 
-    @cached_property
+    @property
     def raw_value(self) -> memoryview:
         """Accessor for the entry raw value."""
         return self._list.get_value(self._pos)
@@ -54,7 +55,7 @@ class Entry:
         """Accessor for the entry value as JSON."""
         return json.loads(self.value)
 
-    @cached_property
+    @property
     def tags(self) -> dict:
         """Accessor for the entry tags."""
         return self._list.get_tags(self._pos)
@@ -144,27 +145,27 @@ class KeyEntry:
         self._list = lst
         self._pos = pos
 
-    @cached_property
+    @property
     def algorithm(self) -> str:
         """Accessor for the key entry algorithm."""
         return self._list.get_algorithm(self._pos)
 
-    @cached_property
+    @property
     def name(self) -> str:
         """Accessor for the key entry name."""
         return self._list.get_name(self._pos)
 
-    @cached_property
+    @property
     def metadata(self) -> str:
         """Accessor for the key entry metadata."""
         return self._list.get_metadata(self._pos)
 
-    @cached_property
+    @property
     def key(self) -> Key:
-        """Accessor for the entry metadata."""
+        """Accessor for the key instance."""
         return Key(self._list.load_key(self._pos))
 
-    @cached_property
+    @property
     def tags(self) -> dict:
         """Accessor for the entry tags."""
         return self._list.get_tags(self._pos)

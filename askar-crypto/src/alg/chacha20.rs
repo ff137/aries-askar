@@ -13,7 +13,7 @@ use crate::{
     encrypt::{KeyAeadInPlace, KeyAeadMeta, KeyAeadParams},
     error::Error,
     generic_array::{typenum::Unsigned, GenericArray},
-    jwk::{JwkEncoder, ToJwk},
+    jwk::{FromJwk, JwkEncoder, JwkParts, ToJwk},
     kdf::{FromKeyDerivation, FromKeyExchange, KeyDerivation, KeyExchange},
     random::KeyMaterial,
     repr::{KeyGen, KeyMeta, KeySecretBytes},
@@ -207,6 +207,24 @@ impl<T: Chacha20Type> KeyAeadInPlace for Chacha20Key<T> {
     }
 }
 
+impl<T: Chacha20Type> FromJwk for Chacha20Key<T> {
+    fn from_jwk_parts(jwk: JwkParts<'_>) -> Result<Self, Error> {
+        if jwk.kty != JWK_KEY_TYPE {
+            return Err(err_msg!(InvalidKeyData, "Unsupported key type"));
+        }
+        if jwk.alg.is_some() && jwk.alg != T::JWK_ALG {
+            return Err(err_msg!(InvalidKeyData, "Unsupported key algorithm"));
+        }
+        Ok(Self(ArrayKey::try_new_with(|buf| {
+            if jwk.k.decode_base64(buf)? != buf.len() {
+                Err(err_msg!(InvalidKeyData))
+            } else {
+                Ok(())
+            }
+        })?))
+    }
+}
+
 impl<T: Chacha20Type> ToJwk for Chacha20Key<T> {
     fn encode_jwk(&self, enc: &mut dyn JwkEncoder) -> Result<(), Error> {
         if enc.is_public() {
@@ -263,13 +281,35 @@ mod tests {
         test_encrypt::<XC20P>();
     }
 
+    #[cfg(feature = "any_key")]
+    #[test]
+    fn jwk_any_compat() {
+        use crate::alg::{any::AnyKey, Chacha20Types, KeyAlg};
+        use alloc::boxed::Box;
+
+        let test_jwk_compat = r#"
+            {"alg": "XC20P",
+            "k": "IateWalmifmgIAtA6XhbPVKPmjBUiwrs3p0ePHpMivU",
+            "kty": "oct"}
+        "#;
+        let key = Box::<AnyKey>::from_jwk(test_jwk_compat).expect("Error decoding ChaCha key JWK");
+        assert_eq!(key.algorithm(), KeyAlg::Chacha20(Chacha20Types::XC20P));
+        let as_chacha = key
+            .downcast_ref::<Chacha20Key<XC20P>>()
+            .expect("Error downcasting ChaCha key");
+        let _ = as_chacha
+            .to_jwk_secret(None)
+            .expect("Error converting key to JWK");
+    }
+
     #[test]
     fn serialize_round_trip() {
         fn test_serialize<T: Chacha20Type>() {
             let key = Chacha20Key::<T>::random().unwrap();
             let sk = key.to_secret_bytes().unwrap();
-            let bytes = serde_cbor::to_vec(&key).unwrap();
-            let deser: &[u8] = serde_cbor::from_slice(bytes.as_ref()).unwrap();
+            let mut bytes = vec![];
+            ciborium::into_writer(&key, &mut bytes).unwrap();
+            let deser: alloc::vec::Vec<u8> = ciborium::from_reader(&bytes[..]).unwrap();
             assert_eq!(deser, sk.as_ref());
         }
         test_serialize::<C20P>();

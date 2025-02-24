@@ -141,7 +141,7 @@ impl SecretBytes {
     pub(crate) fn splice(
         &mut self,
         range: Range<usize>,
-        iter: impl Iterator<Item = u8> + ExactSizeIterator,
+        iter: impl ExactSizeIterator<Item = u8>,
     ) -> Result<(), Error> {
         assert!(range.end >= range.start);
         let rem_len = range.len();
@@ -303,7 +303,7 @@ impl<'de> Deserialize<'de> for SecretBytes {
 
 struct SecVisitor;
 
-impl<'de> de::Visitor<'de> for SecVisitor {
+impl de::Visitor<'_> for SecVisitor {
     type Value = SecretBytes;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {

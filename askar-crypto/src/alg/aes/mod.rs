@@ -13,7 +13,7 @@ use crate::{
     encrypt::{KeyAeadInPlace, KeyAeadMeta, KeyAeadParams},
     error::Error,
     generic_array::{typenum::Unsigned, GenericArray},
-    jwk::{JwkEncoder, ToJwk},
+    jwk::{FromJwk, JwkEncoder, JwkParts, ToJwk},
     kdf::{FromKeyDerivation, FromKeyExchange, KeyDerivation, KeyExchange},
     random::KeyMaterial,
     repr::{KeyGen, KeyMeta, KeySecretBytes},
@@ -118,6 +118,24 @@ impl<T: AesType> FromKeyDerivation for AesKey<T> {
     {
         Ok(Self(KeyType::<T>::try_new_with(|arr| {
             derive.derive_key_bytes(arr)
+        })?))
+    }
+}
+
+impl<T: AesType> FromJwk for AesKey<T> {
+    fn from_jwk_parts(jwk: JwkParts<'_>) -> Result<Self, Error> {
+        if jwk.kty != JWK_KEY_TYPE {
+            return Err(err_msg!(InvalidKeyData, "Unsupported key type"));
+        }
+        if jwk.alg.is_some() && jwk.alg != T::JWK_ALG {
+            return Err(err_msg!(InvalidKeyData, "Unsupported key algorithm"));
+        }
+        Ok(Self(ArrayKey::try_new_with(|buf| {
+            if jwk.k.decode_base64(buf)? != buf.len() {
+                Err(err_msg!(InvalidKeyData))
+            } else {
+                Ok(())
+            }
         })?))
     }
 }
@@ -292,13 +310,35 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(feature = "any_key")]
+    #[test]
+    fn jwk_any_compat() {
+        use crate::alg::{any::AnyKey, AesTypes, KeyAlg};
+        use alloc::boxed::Box;
+
+        let test_jwk_compat = r#"
+            {"alg": "A128CBC-HS256",
+            "k": "6scajSsnjo2fI-wjCCvBC2xNSYyErNyN93CAsyzVVGI",
+            "kty": "oct"}
+        "#;
+        let key = Box::<AnyKey>::from_jwk(test_jwk_compat).expect("Error decoding AES key JWK");
+        assert_eq!(key.algorithm(), KeyAlg::Aes(AesTypes::A128CbcHs256));
+        let as_aes = key
+            .downcast_ref::<AesKey<A128CbcHs256>>()
+            .expect("Error downcasting AES key");
+        let _ = as_aes
+            .to_jwk_secret(None)
+            .expect("Error converting key to JWK");
+    }
+
     #[test]
     fn serialize_round_trip() {
         fn test_serialize<T: AesType>() {
             let key = AesKey::<T>::random().unwrap();
             let sk = key.to_secret_bytes().unwrap();
-            let bytes = serde_cbor::to_vec(&key).unwrap();
-            let deser: &[u8] = serde_cbor::from_slice(bytes.as_ref()).unwrap();
+            let mut bytes = alloc::vec::Vec::new();
+            ciborium::into_writer(&key, &mut bytes).unwrap();
+            let deser: alloc::vec::Vec<u8> = ciborium::from_reader(&bytes[..]).unwrap();
             assert_eq!(deser, sk.as_ref());
         }
         test_serialize::<A128Gcm>();

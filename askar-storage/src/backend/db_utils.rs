@@ -3,8 +3,8 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use sqlx::{
-    database::HasArguments, pool::PoolConnection, Arguments, Database, Encode, Error as SqlxError,
-    IntoArguments, Pool, TransactionManager, Type,
+    pool::PoolConnection, Arguments, Database, Encode, Error as SqlxError, IntoArguments, Pool,
+    TransactionManager, Type,
 };
 
 use crate::{
@@ -243,7 +243,7 @@ impl<DB: ExtDatabase> DbSessionRef<'_, DB> {
     }
 }
 
-impl<'q, DB: ExtDatabase> Deref for DbSessionRef<'q, DB> {
+impl<DB: ExtDatabase> Deref for DbSessionRef<'_, DB> {
     type Target = DbSession<DB>;
 
     fn deref(&self) -> &Self::Target {
@@ -254,7 +254,7 @@ impl<'q, DB: ExtDatabase> Deref for DbSessionRef<'q, DB> {
     }
 }
 
-impl<'q, DB: ExtDatabase> DerefMut for DbSessionRef<'q, DB> {
+impl<DB: ExtDatabase> DerefMut for DbSessionRef<'_, DB> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Owned(e) => e,
@@ -349,29 +349,13 @@ impl<'a, DB: ExtDatabase> DbSessionTxn<'a, DB> {
     }
 }
 
-impl<'a, DB: ExtDatabase> Drop for DbSessionTxn<'a, DB> {
+impl<DB: ExtDatabase> Drop for DbSessionTxn<'_, DB> {
     fn drop(&mut self) {
         if self.rollback {
             self.inner.txn_depth -= 1;
             debug!("Roll-back dropped nested transaction");
             DB::TransactionManager::start_rollback(self.connection_mut());
         }
-    }
-}
-
-pub(crate) trait RunInTransaction<'a, 'q: 'a, DB: ExtDatabase> {
-    type Fut: Future<Output = Result<(), Error>>;
-    fn call_once(self, conn: &'a mut DbSessionActive<'q, DB>) -> Self::Fut;
-}
-
-impl<'a, 'q: 'a, DB: ExtDatabase, F, Fut> RunInTransaction<'a, 'q, DB> for F
-where
-    F: FnOnce(&'a mut DbSessionActive<'q, DB>) -> Fut,
-    Fut: Future<Output = Result<(), Error>> + 'a,
-{
-    type Fut = Fut;
-    fn call_once(self, conn: &'a mut DbSessionActive<'q, DB>) -> Self::Fut {
-        self(conn)
     }
 }
 
@@ -384,7 +368,7 @@ pub struct EncScanEntry {
 }
 
 pub struct QueryParams<'q, DB: Database> {
-    args: <DB as HasArguments<'q>>::Arguments,
+    args: DB::Arguments<'q>,
     count: usize,
 }
 
@@ -402,7 +386,7 @@ impl<'q, DB: Database> QueryParams<'q, DB> {
         T: 'q + Send + sqlx::Encode<'q, DB> + sqlx::Type<DB>,
     {
         for item in vals {
-            self.args.add(item);
+            self.args.add(item).expect("too many arguments");
             self.count += 1;
         }
     }
@@ -411,7 +395,7 @@ impl<'q, DB: Database> QueryParams<'q, DB> {
     where
         T: 'q + Send + sqlx::Encode<'q, DB> + sqlx::Type<DB>,
     {
-        self.args.add(val);
+        self.args.add(val).expect("too many arguments");
         self.count += 1;
     }
 
@@ -423,9 +407,9 @@ impl<'q, DB: Database> QueryParams<'q, DB> {
 impl<'q, DB> IntoArguments<'q, DB> for QueryParams<'q, DB>
 where
     DB: Database,
-    <DB as HasArguments<'q>>::Arguments: IntoArguments<'q, DB>,
+    DB::Arguments<'q>: IntoArguments<'q, DB>,
 {
-    fn into_arguments(self) -> <DB as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> DB::Arguments<'q> {
         self.args.into_arguments()
     }
 }
@@ -456,7 +440,7 @@ pub trait QueryPrepare {
         query
     }
 
-    fn order_by_query<'q>(mut query: String, order_by: OrderBy, descending: bool) -> String {
+    fn order_by_query(mut query: String, order_by: OrderBy, descending: bool) -> String {
         query.push_str(" ORDER BY ");
         match order_by {
             OrderBy::Id => query.push_str("id"),

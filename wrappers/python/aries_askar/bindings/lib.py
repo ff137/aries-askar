@@ -1,13 +1,19 @@
 """Library instance and allocated buffer handling."""
 
 import asyncio
-import json
+import functools
 import itertools
 import logging
 import os
 import sys
 import threading
 import time
+from copy import deepcopy
+
+try:
+    import orjson as json
+except ImportError:
+    import json
 
 from ctypes import (
     Array,
@@ -42,6 +48,28 @@ LOG_LEVELS = {
     3: logging.INFO,
     4: logging.DEBUG,
 }
+
+
+def entry_cache(fn):
+    """Cache results for properties of individual entries."""
+
+    @functools.wraps(fn)
+    def wrapper(self, index: int):
+        if not hasattr(self, "_ecache"):
+            setattr(self, "_ecache", {})
+        cache = self._ecache
+        ckey = (fn, index)
+        if ckey in cache:
+            res = cache[ckey]
+        else:
+            res = fn(self, index)
+            cache[ckey] = res
+        if isinstance(res, dict):
+            # make sure the cached copy is not mutated
+            res = deepcopy(res)
+        return res
+
+    return wrapper
 
 
 def _convert_log_level(level: Union[str, int, None]):
@@ -336,6 +364,7 @@ class Lib:
         inst = cls.INSTANCE and cls.INSTANCE()
         if inst is None:
             inst = super().__new__(cls, *args)
+            inst._initlock = threading.Lock()
             inst._lib = None
             inst._objs = []
             # Keep a weak reference to the instance. This assumes that
@@ -347,10 +376,12 @@ class Lib:
 
     @property
     def loaded(self) -> LibLoad:
-        """Determine if the library has been loaded."""
+        """Access the loaded library instance, initializing it if necessary."""
         if not self._lib:
-            self._lib = LibLoad(self.__class__.LIB_NAME)
-            self._objs.append(self._lib)
+            with self._initlock:
+                if not self._lib:
+                    self._lib = LibLoad(self.__class__.LIB_NAME)
+                    self._objs.append(self._lib)
         return self._lib
 
     def invoke(self, name, argtypes, *args):
